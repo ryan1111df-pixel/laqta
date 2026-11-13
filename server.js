@@ -3,8 +3,8 @@ import { fileURLToPath } from "url";
 import path from "path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const { SERPAPI_KEY, ANTHROPIC_API_KEY, PORT = 3000 } = process.env;
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+const { SERPAPI_KEY, GEMINI_API_KEY, PORT = 3000 } = process.env;
+const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const DEMO = process.env.DEMO_MODE === "true";
 const ENABLED = (process.env.PROVIDERS || "serpapi").split(",").map(x => x.trim());
 const app = express();
@@ -17,32 +17,51 @@ const limiter = (req, res, next) => {
 };
 setInterval(() => { const n = Date.now(); for (const [k, a] of hits) if (!a.some(t => n - t < 60000)) hits.delete(k); }, 60000).unref();
 app.get("/health", (_, res) => res.json({ ok: true }));
-app.get("/api/config", (_, res) => res.json({ demo: DEMO, ai: !!ANTHROPIC_API_KEY, search: DEMO || !!SERPAPI_KEY }));
+app.get("/api/config", (_, res) => res.json({ demo: DEMO, ai: !!GEMINI_API_KEY, search: DEMO || !!SERPAPI_KEY }));
 app.use(express.json({ limit: "1mb" }));
 app.use("/api", (req, res, next) => req.path === "/config" ? next() : limiter(req, res, next));
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ---------- الذكاء الاصطناعي ---------- */
+/* ---------- الذكاء الاصطناعي (Google Gemini) ---------- */
 async function ai(system, user, maxTokens = 1200) {
-  if (!ANTHROPIC_API_KEY) return null;
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  if (!GEMINI_API_KEY) return null;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  
+  const contents = [];
+  if (system) {
+    contents.push({ role: "user", parts: [{ text: "تعليمات النظام الأساسية:\n" + system }] });
+    contents.push({ role: "model", parts: [{ text: "حسناً، فهمت التعليمات وسألتزم بها." }] });
+  }
+  
+  if (Array.isArray(user)) {
+    for (const m of user) {
+      contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: String(m.content) }] });
+    }
+  } else {
+    contents.push({ role: "user", parts: [{ text: String(user) }] });
+  }
+
+  const r = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages: Array.isArray(user) ? user : [{ role: "user", content: user }] }),
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: maxTokens } }),
   });
-  if (!r.ok) throw new Error("AI " + r.status);
+  
+  if (!r.ok) {
+    const errText = await r.text();
+    throw new Error("Gemini API Error " + r.status + ": " + errText);
+  }
+  
   const d = await r.json();
-  return d.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+  return d.candidates?.[0]?.content?.parts?.[0]?.text || null;
 }
 const json = t => { try { return JSON.parse(t.replace(/```json|```/g, "").trim()); } catch { return null; } };
 
-/* ---------- مصادر البحث (أضف مصدراً جديداً هنا) ---------- */
-// كل مصدر: async (query, {country}) => [{title, store, price, shipping, rating, reviews, image, link, description, condition, availability, currency}]
+/* ---------- مصادر البحث ---------- */
 const DOMAINS = { sa: "google.com.sa", ae: "google.ae", kw: "google.com.kw", eg: "google.com.eg" };
 const LOCS = { sa: "Saudi Arabia", ae: "United Arab Emirates", kw: "Kuwait", eg: "Egypt" };
 const CUR = { sa: "SAR", ae: "AED", kw: "KWD", eg: "EGP" };
 const providers = {
-  // بيانات تجريبية مصرّح بها: تعمل فقط عند DEMO_MODE=true وتُعلَّم demo:true في الواجهة
   async demo(query) {
     const base = [["Apple AirPods Pro 2 USB-C", 899, 0, 4.8, 1200], ["Apple AirPods Pro 2 USB-C", 929, 15, 4.7, 310], ["Apple AirPods 4", 649, 0, 4.6, 540], ["Apple AirPods 3", 589, 20, 4.5, 880], ["Samsung Galaxy Buds2 Pro", 459, 0, 4.4, 410], ["Anker Soundcore Q30", 199, 0, 4.4, 2100]];
     const w = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -71,7 +90,6 @@ app.post("/api/search", async (req, res) => {
   const { q = "", country = "sa", maxPrice, store, condition, sort = "price" } = req.body || {};
   if (!q.trim()) return res.status(400).json({ error: "اكتب اسم المنتج أولاً." });
   try {
-    // 1) فهم الطلب
     let intent = { query: q, maxPrice: null, notes: "" };
     if (!DEMO) try {
       const t = await ai(
@@ -81,7 +99,6 @@ app.post("/api/search", async (req, res) => {
     } catch {}
     const budget = Number(maxPrice) || Number(intent.maxPrice) || null;
 
-    // 2) جلب النتائج من كل المصادر (مع تخزين مؤقت 10 دقائق لتوفير رصيد SerpApi)
     const ck = JSON.stringify([intent.query, country, DEMO, ENABLED]);
     const hit = cache.get(ck);
     let items;
@@ -95,15 +112,13 @@ app.post("/api/search", async (req, res) => {
       if (cache.size > 200) cache.delete(cache.keys().next().value);
     }
 
-    // 3) فلاتر المستخدم (الميزانية على السعر النهائي شاملاً الشحن إن توفر)
     items.forEach(i => { i.total = i.shipping != null ? i.price + i.shipping : i.price; });
     if (budget) items = items.filter(i => i.total <= budget);
     if (store) items = items.filter(i => (i.store || "").toLowerCase().includes(store.toLowerCase()));
     if (condition) items = items.filter(i => i.condition === condition);
 
-    // 4) استبعاد غير المطابق بالذكاء الاصطناعي (يميّز الموديلات والإصدارات والإكسسوارات)
     let dropped = 0;
-    if (!DEMO && ANTHROPIC_API_KEY && items.length) {
+    if (!DEMO && GEMINI_API_KEY && items.length) {
       try {
         const list = items.map((i, n) => `${n}: ${i.title}`).join("\n");
         const t = await ai(
@@ -114,7 +129,6 @@ app.post("/api/search", async (req, res) => {
       } catch {}
     }
 
-    // 5) الأرخص أولاً، ثم إزالة التكرار (نفس المتجر + نفس العنوان مع الإبقاء على الأرخص)، ثم الترتيب المطلوب
     items.sort((a, b) => a.total - b.total);
     const seen = new Set();
     items = items.filter(i => { const k = (i.store || "") + "|" + i.title.toLowerCase().replace(/\s+/g, " "); if (seen.has(k)) return false; seen.add(k); return true; });
@@ -137,7 +151,7 @@ const brief = r => (r || []).map((i, n) => `#${n + 1} | ${i.title} | ${i.store |
 
 /* ---------- /api/chat ---------- */
 app.post("/api/chat", async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: "مفتاح ANTHROPIC_API_KEY غير مضاف." });
+  if (!GEMINI_API_KEY) return res.status(500).json({ error: "مفتاح GEMINI_API_KEY غير مضاف." });
   try {
     const { messages = [], results = [] } = req.body;
     let msgs = messages.slice(-10).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content).slice(0, 2000) }));
@@ -149,7 +163,7 @@ app.post("/api/chat", async (req, res) => {
 
 /* ---------- /api/compare ---------- */
 app.post("/api/compare", async (req, res) => {
-  if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: "مفتاح ANTHROPIC_API_KEY غير مضاف." });
+  if (!GEMINI_API_KEY) return res.status(500).json({ error: "مفتاح GEMINI_API_KEY غير مضاف." });
   try {
     const items = (req.body.items || []).slice(0, 4);
     const t = await ai(SYS + ' أعد JSON فقط: {"items":[{"pros":["..."],"cons":["..."],"specs":"ملخص مواصفات من البيانات فقط"}],"verdict":"أفضل خيار ولماذا (أفضل قيمة مقابل السعر)"} بنفس ترتيب العناصر.', brief(items), 1200);
