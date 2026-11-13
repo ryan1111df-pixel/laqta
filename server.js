@@ -4,7 +4,7 @@ import path from "path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { SERPAPI_KEY, GEMINI_API_KEY, PORT = 3000 } = process.env;
-const MODEL = "gemini-2.5-flash";
+const MODEL = "gemini-1.5-flash";
 const DEMO = process.env.DEMO_MODE === "true";
 const ENABLED = (process.env.PROVIDERS || "serpapi").split(",").map(x => x.trim());
 const app = express();
