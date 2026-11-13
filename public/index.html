@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لقطة - مقارنة الأسعار والذكاء الاصطناعي</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap');
+    body { font-family: 'Tajawal', sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900 min-h-screen flex flex-col">
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="bg-indigo-600 text-white w-9 h-9 rounded-xl flex items-center justify-center font-bold text-lg shadow-sm">لق</div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight text-indigo-900">لقطة</h1>
+          <p class="text-xs text-gray-500">مقارنة أسعار ذكية</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <select id="countrySelect" class="bg-gray-100 border border-gray-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="sa">🇸🇦 السعودية</option>
+          <option value="ae">🇦🇪 الإمارات</option>
+          <option value="kw">🇰🇼 الكويت</option>
+          <option value="eg">🇪🇬 مصر</option>
+        </select>
+        <span id="demoBadge" class="hidden bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-full">تجريبي</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 max-w-4xl w-full mx-auto p-4 space-y-6">
+    <!-- صندوق البحث -->
+    <section class="bg-white rounded-2xl p-4 shadow-xs border border-gray-200 space-y-3">
+      <div class="relative">
+        <input type="text" id="searchInput" placeholder="ابحث عن منتج (مثال: آيفون 16، آيربودز برو 2...)" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 pl-12 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+        <button id="searchBtn" class="absolute left-2 top-2 bottom-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 rounded-lg text-sm font-medium transition flex items-center justify-center shadow-xs">
+          <i class="fa-solid fa-search"></i>
+        </button>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs text-gray-600">
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-gray-700">ترتيب حسب:</span>
+          <select id="sortSelect" class="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 focus:outline-none">
+            <option value="price">السعر: الأرخص أولاً</option>
+            <option value="rating">التقييم الأعلى</option>
+          </select>
+        </div>
+        <button id="advancedToggle" class="text-indigo-600 hover:text-indigo-700 font-medium flex items-center gap-1">
+          <i class="fa-solid fa-sliders"></i> فلاتر متقدمة
+        </button>
+      </div>
+      <!-- الفلاتر المتقدمة (مخفية افتراضياً) -->
+      <div id="advancedFilters" class="hidden pt-3 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+        <div>
+          <label class="block text-gray-500 mb-1">الحد الأقصى للسعر</label>
+          <input type="number" id="filterMaxPrice" placeholder="مثال: 1000" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-1">اسم المتجر</label>
+          <input type="text" id="filterStore" placeholder="مثال: جرير، نون..." class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block text-gray-500 mb-1">الحالة</label>
+          <select id="filterCondition" class="w-full bg-gray-50 border border-gray-200 rounded-lg p-2">
+            <option value="">الكل</option>
+            <option value="new">جديد</option>
+            <option value="used">مستعمل</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- شريط الإشعارات والحالة -->
+    <div id="statusBox" class="hidden bg-indigo-50 text-indigo-900 px-4 py-3 rounded-xl text-xs flex items-center justify-between border border-indigo-100">
+      <span id="statusText">جاري البحث وتحليل الأسعار...</span>
+      <i class="fa-solid fa-spinner fa-spin text-indigo-600"></i>
+    </div>
+
+    <!-- نتائج البحث -->
+    <section id="resultsSection" class="space-y-4">
+      <div id="emptyState" class="text-center py-16 space-y-3 bg-white rounded-2xl border border-dashed border-gray-200 p-6">
+        <div class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+          <i class="fa-solid fa-basket-shopping"></i>
+        </div>
+        <h2 class="font-bold text-gray-800 text-base">ابحث عن أي منتج لمعرفة أرخص سعر</h2>
+        <p class="text-xs text-gray-500 max-w-sm mx-auto">نقوم بالبحث في المتاجر وتحليل الأسعار وتصفية الإكسسوارات والموديلات المطابقة بدقة عبر الذكاء الاصطناعي.</p>
+      </div>
+
+      <div id="resultsContainer" class="grid gap-3"></div>
+    </section>
+
+    <!-- شات المساعد الذكي والمقارنة -->
+    <section id="aiSection" class="hidden space-y-4">
+      <div class="bg-white rounded-2xl p-4 shadow-xs border border-gray-200 space-y-3">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 class="font-bold text-sm text-indigo-900 flex items-center gap-2">
+            <i class="fa-solid fa-robot text-indigo-600"></i> مساعد لقطة الذكي
+          </h3>
+          <button id="compareBtn" class="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+            <i class="fa-solid fa-scale-balanced"></i> مقارنة الخيارات المحددة (<span id="compareCount">0</span>)
+          </button>
+        </div>
+        <!-- صندوق المحادثة -->
+        <div id="chatMessages" class="max-h-60 overflow-y-auto space-y-2 text-xs p-1"></div>
+        <div class="flex gap-2 pt-2">
+          <input type="text" id="chatInput" placeholder="اسأل المساعد عن أفضل خيار، المواصفات..." class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <button id="chatSendBtn" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-medium transition">إرسال</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- نافذة المقارنة المنبثقة -->
+    <div id="compareModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-xs">
+      <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-5 space-y-4 shadow-xl">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3">
+          <h3 class="font-bold text-sm text-gray-900"><i class="fa-solid fa-scale-balanced text-indigo-600"></i> مقارنة المنتجات الذكية</h3>
+          <button id="closeCompareModal" class="text-gray-400 hover:text-gray-600 text-base"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="compareModalBody" class="text-xs space-y-3">
+          <div class="text-center py-8 text-gray-500"><i class="fa-solid fa-spinner fa-spin text-xl"></i> جاري تحليل ومقارنة المنتجات بالذكاء الاصطناعي...</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="bg-white border-t border-gray-200 mt-auto py-3 text-center text-[11px] text-gray-500">
+    منصة لقطة &copy; 2026 - مقارنة أسعار ذكية للمملكة العربية السعودية والمنطقة
+  </footer>
+
+  <script>
+    let currentResults = [];
+    let selectedForCompare = new Set();
+    let chatHistory = [];
+
+    async function checkConfig() {
+      try {
+        const r = await fetch("/api/config");
+        const d = await r.json();
+        if (d.demo) document.getElementById("demoBadge").classList.remove("hidden");
+      } catch {}
+    }
+    checkConfig();
+
+    document.getElementById("advancedToggle").addEventListener("click", () => {
+      document.getElementById("advancedFilters").classList.toggle("hidden");
+    });
+
+    document.getElementById("searchBtn").addEventListener("click", performSearch);
+    document.getElementById("searchInput").addEventListener("keypress", e => { if (e.key === "Enter") performSearch(); });
+
+    async function performSearch() {
+      const q = document.getElementById("searchInput").value.trim();
+      if (!q) return alert("اكتب اسم المنتج أولاً.");
+      
+      const country = document.getElementById("countrySelect").value;
+      const sort = document.getElementById("sortSelect").value;
+      const maxPrice = document.getElementById("filterMaxPrice").value;
+      const store = document.getElementById("filterStore").value;
+      const condition = document.getElementById("filterCondition").value;
+
+      const statusBox = document.getElementById("statusBox");
+      const statusText = document.getElementById("statusText");
+      statusBox.classList.remove("hidden");
+      statusText.textContent = "جاري البحث في المتاجر وتحليل وتصفية النتائج بالذكاء الاصطناعي...";
+
+      try {
+        const r = await fetch("/api/search", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ q, country, sort, maxPrice, store, condition })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "تعذّر إجراء البحث.");
+
+        currentResults = d.results || [];
+        renderResults(currentResults);
+        statusBox.classList.add("hidden");
+
+        if (currentResults.length > 0) {
+          document.getElementById("aiSection").classList.remove("hidden");
+          chatHistory = [{ role: "assistant", content: `أهلاً بك! وجدت لك ${currentResults.length} نتيجة مطابقة لـ "${q}". تفضل بالسؤال عن أي تفصيل أو استفسار.` }];
+          renderChat();
+        }
+      } catch (e) {
+        statusText.textContent = e.message;
+        setTimeout(() => statusBox.classList.add("hidden"), 5000);
+      }
+    }
+
+    function renderResults(items) {
+      const container = document.getElementById("resultsContainer");
+      const emptyState = document.getElementById("emptyState");
+      if (!items.length) {
+        emptyState.classList.remove("hidden");
+        container.innerHTML = "";
+        return;
+      }
+      emptyState.classList.add("hidden");
+
+      container.innerHTML = items.map((item, index) => `
+        <div class="bg-white rounded-2xl p-4 border border-gray-200 shadow-xs flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:border-indigo-200 transition">
+          <div class="flex items-start gap-3 flex-1">
+            <div class="w-16 h-16 bg-gray-100 rounded-xl overflow-hidden shrink-0 flex items-center justify-center border border-gray-100">
+              ${item.image ? `<img src="${item.image}" alt="" class="w-full h-full object-contain">` : `<i class="fa-solid fa-box text-gray-400"></i>`}
+            </div>
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="bg-indigo-50 text-indigo-700 font-bold text-[10px] px-2 py-0.5 rounded-md">#${index + 1}</span>
+                <span class="bg-gray-100 text-gray-700 font-medium text-[10px] px-2 py-0.5 rounded-md">${item.store || "متجر"}</span>
+                ${item.demo ? '<span class="bg-amber-50 text-amber-700 text-[10px] px-1.5 py-0.5 rounded">تجريبي</span>' : ''}
+              </div>
+              <h4 class="font-bold text-sm text-gray-900 leading-snug">${item.title}</h4>
+              <p class="text-[11px] text-gray-500 line-clamp-1">${item.description || ""}</p>
+              <div class="flex items-center gap-3 text-xs text-gray-600 pt-1">
+                ${item.rating ? `<span class="text-amber-500 font-bold"><i class="fa-solid fa-star"></i> ${item.rating} (${item.reviews || 0})</span>` : ''}
+                <span>الشحن: ${item.shipping === 0 ? '<strong class="text-emerald-600">مجاني</strong>' : (item.shipping != null ? item.shipping + " " + (item.currency || "SAR") : "غير متوفر")}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100 gap-3">
+            <div class="text-left">
+              <div class="text-lg font-extrabold text-indigo-600">${item.price} <span class="text-xs font-normal text-gray-500">${item.currency || "SAR"}</span></div>
+              ${item.shipping > 0 ? `<div class="text-[10px] text-gray-400">المجموع شامل الشحن: ${item.total}</div>` : ''}
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs flex items-center gap-1 cursor-pointer bg-gray-50 hover:bg-gray-100 px-2.5 py-1.5 rounded-lg border border-gray-200">
+                <input type="checkbox" value="${item.id}" onchange="toggleCompare('${item.id}')" ${selectedForCompare.has(item.id) ? 'checked' : ''} class="rounded text-indigo-600 focus:ring-indigo-500">
+                <span>مقارنة</span>
+              </label>
+              <a href="${item.link}" target="_blank" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition shadow-xs">
+                شراء <i class="fa-solid fa-arrow-up-right-from-square text-[10px] mr-1"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function toggleCompare(id) {
+      if (selectedForCompare.has(id)) selectedForCompare.delete(id);
+      else {
+        if (selectedForCompare.size >= 4) { alert("يمكنك مقارنة 4 منتجات كحد أقصى."); return renderResults(currentResults); }
+        selectedForCompare.add(id);
+      }
+      document.getElementById("compareCount").textContent = selectedForCompare.size;
+    }
+
+    document.getElementById("compareBtn").addEventListener("click", async () => {
+      if (selectedForCompare.size === 0) return alert("اختر منتجاً واحدأ على الأقل للمقارنة.");
+      const modal = document.getElementById("compareModal");
+      const modalBody = document.getElementById("compareModalBody");
+      modal.classList.remove("hidden");
+      modalBody.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fa-solid fa-spinner fa-spin text-xl"></i> جاري تحليل ومقارنة المنتجات بالذكاء الاصطناعي...</div>';
+
+      const itemsToCompare = currentResults.filter(i => selectedForCompare.has(i.id));
+      try {
+        const r = await fetch("/api/compare", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ items: itemsToCompare })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "تعذّرت المقارنة.");
+
+        modalBody.innerHTML = `
+          <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-3 text-xs text-indigo-900 space-y-1">
+            <strong class="block font-bold text-indigo-950"><i class="fa-solid fa-award"></i> الخلاصة والتوصية:</strong>
+            <p>${d.verdict || ""}</p>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-3 pt-2">
+            ${(d.items || []).map((res, idx) => `
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+                <div class="font-bold text-gray-800 text-xs">${itemsToCompare[idx]?.title || ""}</div>
+                <div class="text-[11px] text-indigo-600 font-bold">${itemsToCompare[idx]?.price} ${itemsToCompare[idx]?.currency || "SAR"} (${itemsToCompare[idx]?.store})</div>
+                <div class="text-[11px] text-gray-600"><strong>المواصفات:</strong> ${res.specs || "-"}</div>
+                <div class="space-y-1">
+                  <span class="text-[10px] font-bold text-emerald-700 block">الإيجابيات:</span>
+                  <ul class="list-disc list-inside text-[10px] text-gray-600">${(res.pros || []).map(p => `<li>${p}</li>`).join("")}</ul>
+                </div>
+                <div class="space-y-1">
+                  <span class="text-[10px] font-bold text-rose-700 block">السلبيات:</span>
+                  <ul class="list-disc list-inside text-[10px] text-gray-600">${(res.cons || []).map(c => `<li>${c}</li>`).join("")}</ul>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+      } catch (e) {
+        modalBody.innerHTML = `<div class="text-center py-8 text-rose-600">${e.message}</div>`;
+      }
+    });
+
+    document.getElementById("closeCompareModal").addEventListener("click", () => {
+      document.getElementById("compareModal").classList.add("hidden");
+    });
+
+    document.getElementById("chatSendBtn").addEventListener("click", sendChatMessage);
+    document.getElementById("chatInput").addEventListener("keypress", e => { if (e.key === "Enter") sendChatMessage(); });
+
+    async function sendChatMessage() {
+      const input = document.getElementById("chatInput");
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+
+      chatHistory.push({ role: "user", content: text });
+      renderChat();
+
+      try {
+        const r = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: chatHistory, results: currentResults })
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || "تعذّر الرد.");
+        chatHistory.push({ role: "assistant", content: d.reply });
+        renderChat();
+      } catch (e) {
+        chatHistory.push({ role: "assistant", content: "عذراً، تعذّر الرد حالياً: " + e.message });
+        renderChat();
+      }
+    }
+
+    function renderChat() {
+      const container = document.getElementById("chatMessages");
+      container.innerHTML = chatHistory.map(m => `
+        <div class="flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}">
+          <div class="max-w-[85%] rounded-xl px-3 py-2 ${m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'}">
+            ${m.content}
+          </div>
+        </div>
+      `).join("");
+      container.scrollTop = container.scrollHeight;
+    }
+  </script>
+</body>
+</html>
