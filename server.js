@@ -4,7 +4,7 @@ import path from "path";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { SERPAPI_KEY, GEMINI_API_KEY, PORT = 3000 } = process.env;
-const MODEL = "gemini-1.5-flash";
+const MODEL = "gemini-2.5-flash"; // أحدث نموذج فلاش مجاني وسريع
 const DEMO = process.env.DEMO_MODE === "true";
 const ENABLED = (process.env.PROVIDERS || "serpapi").split(",").map(x => x.trim());
 const app = express();
@@ -22,14 +22,20 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/api", (req, res, next) => req.path === "/config" ? next() : limiter(req, res, next));
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ---------- الذكاء الاصطناعي (Google Gemini المبسط) ---------- */
+/* ---------- الذكاء الاصطناعي (Google Gemini الحديث) ---------- */
 async function ai(systemPrompt, userPrompt) {
   if (!GEMINI_API_KEY) return null;
+  // استخدام مسار التوليد القياسي المحدث لأحدث نماذج فلاش
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
   
   const payload = {
     contents: [
-      { role: "user", parts: [{ text: (systemPrompt ? systemPrompt + "\n\n" : "") + (typeof userPrompt === "string" ? userPrompt : JSON.stringify(userPrompt)) }] }
+      {
+        role: "user",
+        parts: [
+          { text: (systemPrompt ? systemPrompt + "\n\n" : "") + (typeof userPrompt === "string" ? userPrompt : JSON.stringify(userPrompt)) }
+        ]
+      }
     ]
   };
 
